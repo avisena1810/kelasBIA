@@ -1,0 +1,76 @@
+WITH product_sales AS (
+    SELECT 
+        item_description AS product,  -- Renaming 'item_description' to 'product'
+        SUM(sale_dollars) AS total_sales,  -- Total sales per product
+        COUNT(*) AS transaction_frequency  -- Count of transactions for each product
+    FROM 
+        public.iowa_drink_sales  -- Reference to the sales table
+    GROUP BY 
+        item_description  -- Grouping by product name
+),
+overall_totals AS (
+    SELECT 
+        SUM(total_sales) AS total_overall_sales,
+        SUM(transaction_frequency) AS total_overall_transactions  -- Total transaction count
+    FROM 
+        product_sales
+),
+ranked_sales AS (
+    SELECT 
+        product,
+        total_sales,
+        transaction_frequency,
+        total_sales / (SELECT total_overall_sales FROM overall_totals) * 100 AS share_of_sales,  -- Share of total sales
+        transaction_frequency / (SELECT total_overall_transactions FROM overall_totals) * 100 AS share_of_frequency  -- Share of total transactions
+    FROM 
+        product_sales
+    ORDER BY 
+        total_sales DESC  -- Ordering by total sales
+),
+cumulative_analysis AS (
+    SELECT 
+        product,
+        total_sales,
+        share_of_sales,
+        SUM(share_of_sales) OVER (ORDER BY total_sales DESC) AS cumulative_sales,  -- Cumulative sales percentage
+        transaction_frequency,
+        share_of_frequency,
+        SUM(share_of_frequency) OVER (ORDER BY transaction_frequency DESC) AS cumulative_frequency  -- Cumulative frequency percentage
+    FROM 
+        ranked_sales
+)
+SELECT 
+    product AS "Product",  -- Product name
+    total_sales AS "Sales",
+    share_of_sales AS "Share Sales",
+    cumulative_sales AS "Cumulative Sales",
+    CASE 
+        WHEN cumulative_sales <= 20 THEN 'A'  -- ABC classification based on cumulative sales
+        WHEN cumulative_sales <= 50 THEN 'B'
+        ELSE 'C'
+    END AS "Sales Category",
+    transaction_frequency AS "Transaction Frequency",
+    share_of_frequency AS "Share Frequency",
+    cumulative_frequency AS "Cumulative Frequency",
+    CASE 
+        WHEN cumulative_frequency <= 20 THEN 'X'  -- XYZ classification based on cumulative frequency
+        WHEN cumulative_frequency <= 50 THEN 'Y'
+        ELSE 'Z'
+    END AS "Product Category",
+    CONCAT(
+        CASE 
+            WHEN cumulative_sales <= 20 THEN 'A' 
+            WHEN cumulative_sales <= 50 THEN 'B'
+            ELSE 'C'
+        END,
+        CASE 
+            WHEN cumulative_frequency <= 20 THEN 'X' 
+            WHEN cumulative_frequency <= 50 THEN 'Y'
+            ELSE 'Z'
+        END
+    ) AS "Combined ABC XYZ"
+FROM 
+    cumulative_analysis
+ORDER BY 
+    total_sales DESC;  -- Final ordering by total sales
+
